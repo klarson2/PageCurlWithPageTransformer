@@ -96,6 +96,7 @@ public class MainActivity extends AppCompatActivity {
          Log.d(TAG, "transformPage, position = " + position + ", page = " + page.getTag(R.id.viewpager));
          if (page instanceof PageCurl) {
             if (position > -1.0F && position < 1.0F) {
+               // hold the page steady and let the views do the work
                page.setTranslationX(-position * page.getWidth());
             } else {
                page.setTranslationX(0.0F);
