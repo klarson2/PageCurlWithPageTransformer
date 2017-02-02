@@ -24,14 +24,16 @@ public class MainActivity extends AppCompatActivity {
       setContentView(R.layout.activity_main);
 
       ViewPager viewPager = (ViewPager) findViewById(R.id.viewpager);
-      viewPager.setAdapter(new TestPagerAdapter(getSupportFragmentManager()));
-      viewPager.setPageTransformer(true, new PageCurlPageTransformer());
+      if (viewPager != null) {
+         viewPager.setAdapter(new TestPagerAdapter(getSupportFragmentManager()));
+         viewPager.setPageTransformer(false, new PageCurlPageTransformer());
+      }
 
    }
 
    public static class TestPagerAdapter extends FragmentPagerAdapter {
 
-      public TestPagerAdapter(FragmentManager fm) {
+      TestPagerAdapter(FragmentManager fm) {
          super(fm);
       }
 
@@ -91,15 +93,15 @@ public class MainActivity extends AppCompatActivity {
       @Override
       public void transformPage(View page, float position) {
 
-         Log.d(TAG, "transformPage, position = " + position + ", page = " + (Integer) page.getTag(R.id.viewpager));
+         Log.d(TAG, "transformPage, position = " + position + ", page = " + page.getTag(R.id.viewpager));
          if (page instanceof PageCurl) {
             if (position > -1.0F && position < 1.0F) {
                page.setTranslationX(-position * page.getWidth());
             } else {
                page.setTranslationX(0.0F);
             }
-            if (position < 0.0F && position > -1.0F) {
-               ((PageCurl) page).setCurlFactor(1.0F + position);
+            if (position <= 1.0F && position >= -1.0F) {
+               ((PageCurl) page).setCurlFactor(position);
             }
          }
       }

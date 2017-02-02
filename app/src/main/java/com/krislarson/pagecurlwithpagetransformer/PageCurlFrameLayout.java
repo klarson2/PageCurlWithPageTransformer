@@ -16,6 +16,8 @@ public class PageCurlFrameLayout extends FrameLayout implements PageCurl {
 
    private static final String TAG = "PageCurlFrameLayout";
 
+   private float mCurl;
+
    private Path mClipPath;
 
    private Path mCurlPath;
@@ -23,6 +25,14 @@ public class PageCurlFrameLayout extends FrameLayout implements PageCurl {
    private Paint mCurlStrokePaint;
 
    private Paint mCurlFillPaint;
+
+   private PointF mBottomFold = new PointF();
+
+   private PointF mTopFold = new PointF();
+
+   private PointF mBottomFoldTip = new PointF();
+
+   private PointF mTopFoldTip = new PointF();
 
    public PageCurlFrameLayout(Context context) {
       super(context);
@@ -68,33 +78,81 @@ public class PageCurlFrameLayout extends FrameLayout implements PageCurl {
    @Override
    public void setCurlFactor(float curl) {
 
-      Log.d(TAG, "setCurlFactor, curl = " + curl + ", page = " + (Integer) getTag(R.id.viewpager));
+      Log.d(TAG, "setCurlFactor, curl = " + curl + ", page = " + getTag(R.id.viewpager));
+
+      /*
+       * From 1.0 to 0.0, clip reveals page from corner to full, as though beneath the folding page that precedes
+       * From 0.0 to -1.0 clip hides corner of page and shows page folding over
+       */
+
+      mCurl = curl;
+      boolean foldingPage = curl < 0;
+      if (curl < 0) curl += 1;
 
       int w = getWidth();
       int h = getHeight();
 
-      PointF a = new PointF(w * curl, h);
-      PointF b = new PointF(w, h);
-      PointF c = new PointF(w, 0);
-      PointF d = new PointF(w * curl, 0);
+      // This math based on logic from:
+      // https://github.com/moritz-wundke/android-page-curl/blob/master/src/com/mystictreegames/pagecurl/PageCurlView.java
 
-      PointF e = new PointF(w * curl / 2.0F, h);
-      PointF f = new PointF(w, h);
-      PointF g = new PointF(w, 0);
-      PointF j = new PointF(w * curl / 2.0F, 0);
+      mBottomFold.x = w * curl;
+      mBottomFold.y = h;
+
+      if (mBottomFold.x > w / 2) {
+         // fold is on right edge
+         mTopFold.x = w;
+         mTopFold.y = h - (w - mBottomFold.x) * h / mBottomFold.x;
+      } else {
+         // fold is on top edge
+         mTopFold.x = 2 * mBottomFold.x;
+         mTopFold.y = 0;
+      }
+
+      // this is the angle of the fold
+      double angle = Math.atan((h - mTopFold.y) / (mTopFold.x - mBottomFold.x));
+
+      // multiple fold angle by 2 to get the angle of the right page edge
+      double cosFactor = Math.cos(2 * angle);
+      double sinFactor = Math.sin(2 * angle);
+
+      float foldWidth = w - mBottomFold.x;
+      mBottomFoldTip.x = (float) (mBottomFold.x + foldWidth * cosFactor);
+      mBottomFoldTip.y = (float) (h - foldWidth * sinFactor);
+
+      if (mBottomFold.x > w / 2) {
+         mTopFoldTip.x = mTopFold.x;
+         mTopFoldTip.y = mTopFold.y;
+      } else {
+         mTopFoldTip.x = (float) (mTopFold.x + (w - mTopFold.x) * cosFactor);
+         mTopFoldTip.y = (float) - (sinFactor * (w - mTopFold.x));
+      }
 
       mClipPath.reset();
-      mClipPath.moveTo(e.x, e.y);
-      mClipPath.lineTo(f.x, f.y);
-      mClipPath.lineTo(g.x, g.y);
-      mClipPath.lineTo(j.x, j.y);
+      if (foldingPage) {
+         // clip to show the page disappearing as it's folded
+         mClipPath.moveTo(0, 0);
+         if (mTopFold.y != 0) {
+            mClipPath.lineTo(w, 0);
+         }
+         mClipPath.lineTo(mTopFold.x, mTopFold.y);
+         mClipPath.lineTo(mBottomFold.x, mBottomFold.y);
+         mClipPath.lineTo(0, h);
+      } else {
+         // clip to show the page underneath revealing
+         mClipPath.moveTo(w, h);
+         if (mTopFold.y == 0) {
+            mClipPath.lineTo(w, 0);
+         }
+         mClipPath.lineTo(mTopFold.x, mTopFold.y);
+         mClipPath.lineTo(mBottomFold.x, mBottomFold.y);
+      }
       mClipPath.close();
 
       mCurlPath.reset();
-      mCurlPath.moveTo(a.x, a.y);
-      mCurlPath.lineTo(b.x, b.y);
-      mCurlPath.lineTo(c.x, c.y);
-      mCurlPath.lineTo(d.x, d.y);
+      mCurlPath.moveTo(mBottomFold.x, mBottomFold.y);
+      mCurlPath.lineTo(mBottomFoldTip.x, mBottomFoldTip.y);
+      mCurlPath.lineTo(mTopFoldTip.x, mTopFoldTip.y);
+      mCurlPath.lineTo(mTopFold.x, mTopFold.y);
       mCurlPath.close();
 
       invalidate();
@@ -103,15 +161,14 @@ public class PageCurlFrameLayout extends FrameLayout implements PageCurl {
    @Override
    protected void dispatchDraw(Canvas canvas) {
       canvas.save();
-      canvas.clipPath(mClipPath);
+      if (mCurl != 0 && mCurl != 1 && mCurl != -1) {
+         canvas.clipPath(mClipPath);
+      }
       super.dispatchDraw(canvas);
       canvas.restore();
-   }
-
-   @Override
-   public void onDrawForeground(Canvas canvas) {
-      super.onDrawForeground(canvas);
-      canvas.drawPath(mCurlPath, mCurlFillPaint);
-      canvas.drawPath(mCurlPath, mCurlStrokePaint);
+      if (mCurl < 0) {
+         canvas.drawPath(mCurlPath, mCurlFillPaint);
+         canvas.drawPath(mCurlPath, mCurlStrokePaint);
+      }
    }
 }
